@@ -1,20 +1,16 @@
 import { useState, useEffect } from "react";
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   SUPABASE CONFIG
-   When deploying to Vercel, replace these with your real values from
-   https://supabase.com → Project Settings → API
+   SUPABASE CONFIG — values come from Vercel environment variables
    ───────────────────────────────────────────────────────────────────────────── */
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY;
-const RESEND_API   = process.env.NEXT_PUBLIC_RESEND_API; // https://resend.com
 
 /* ─────────────────────────────────────────────────────────────────────────────
    DATA LAYER
-   In preview mode (no Supabase keys), all data falls back to localStorage.
-   Swap isMock = false once real keys are in place.
+   Falls back to localStorage when Supabase keys are not present.
    ───────────────────────────────────────────────────────────────────────────── */
-const isMock = SUPABASE_URL === "YOUR_SUPABASE_URL";
+const isMock = !SUPABASE_URL || SUPABASE_URL === "YOUR_SUPABASE_URL";
 
 const db = {
   async getUser(uid) {
@@ -71,12 +67,16 @@ const db = {
   },
 
   async sendEmail(email, name, uid) {
-    if (isMock) { console.log(`[mock] email sent to ${email} with uid ${uid}`); return; }
-    await fetch("/api/send-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, name, uid }),
-    });
+    if (isMock || !email) return;
+    try {
+      await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, name, uid }),
+      });
+    } catch (e) {
+      // silently fail — email is best-effort
+    }
   },
 };
 
@@ -84,8 +84,6 @@ const db = {
 const genUID = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
 
 const getUID = () => {
-  // In a real Next.js app this reads from the URL: /u/[uid]
-  // In this preview it uses localStorage as the "URL"
   let uid = localStorage.getItem("lc_uid");
   if (!uid) { uid = genUID(); localStorage.setItem("lc_uid", uid); }
   return uid;
@@ -236,8 +234,7 @@ function OnboardingModal({ onSave, loading }) {
   const [err,   setErr]   = useState("");
 
   const submit = () => {
-    if (!name.trim())  { setErr("Please enter your name."); return; }
-    if (!email.trim() || !email.includes("@")) { setErr("Please enter a valid email."); return; }
+    if (!name.trim()) { setErr("Please enter your name."); return; }
     setErr("");
     onSave(name.trim(), email.trim());
   };
@@ -248,13 +245,13 @@ function OnboardingModal({ onSave, loading }) {
         <div style={{ fontSize:"10px", letterSpacing:"3px", color:C.dim, textTransform:"uppercase", marginBottom:"8px" }}>Welcome</div>
         <div style={{ fontSize:"22px", marginBottom:"6px" }}>Life Capitals</div>
         <div style={{ fontSize:"13px", color:C.muted, lineHeight:"1.6", marginBottom:"28px" }}>
-          Your daily reflection space. We'll save your personal link and send it to your email so you can access your data from any device.
+          Your daily reflection space. We'll create a personal link for you — save it to your home screen so you can return anytime.
         </div>
 
         <F label="What should we call you?">
           <TInput value={name} onChange={e => setName(e.target.value)} placeholder="Your first name" />
         </F>
-        <F label="Your email (to receive your personal link)">
+        <F label="Your email — optional, just for your records">
           <TInput value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" type="email" />
         </F>
 
@@ -278,40 +275,106 @@ function OnboardingModal({ onSave, loading }) {
   );
 }
 
-/* ─── link reminder banner ──────────────────────────────────────────────────── */
-function LinkBanner({ uid, onDismiss }) {
+/* ─── add to home screen modal ──────────────────────────────────────────────── */
+function HomeScreenModal({ onDismiss }) {
   const [copied, setCopied] = useState(false);
-  const link = `yourapp.vercel.app/u/${uid}`;
+  const link = typeof window !== "undefined" ? window.location.href : "";
+  const isIOS     = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+
   const copy = () => {
-    navigator.clipboard?.writeText(link).catch(()=>{});
+    navigator.clipboard?.writeText(link).catch(() => {});
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 2500);
   };
+
+  const iosSteps = [
+    { n:"1", t:"Tap the Share button", d:"The box with an arrow — at the bottom of Safari" },
+    { n:"2", t:'Tap "Add to Home Screen"', d:"Scroll down the share sheet to find it" },
+    { n:"3", t:"Tap Add", d:"It appears on your home screen like a real app" },
+  ];
+  const androidSteps = [
+    { n:"1", t:"Tap the three-dot menu", d:"Top right corner of Chrome" },
+    { n:"2", t:'Tap "Add to Home screen"', d:'Or "Install app" if you see that instead' },
+    { n:"3", t:"Tap Add", d:"It appears on your home screen like a real app" },
+  ];
+
   return (
-    <div style={{ margin:"0 16px 16px", padding:"16px", background:"rgba(201,180,110,0.08)", border:`1px solid rgba(201,180,110,0.22)`, borderRadius:"12px" }}>
-      <div style={{ fontSize:"10px", letterSpacing:"2px", color:C.amber, textTransform:"uppercase", marginBottom:"6px" }}>Your Personal Link</div>
-      <div style={{ fontSize:"12px", color:C.muted, marginBottom:"12px", lineHeight:"1.5" }}>
-        Bookmark this link to access your data from any device.
-      </div>
-      <div style={{ background:"#0a0a0a", borderRadius:"6px", padding:"10px 12px", fontSize:"12px", color:"#666", fontFamily:"monospace", marginBottom:"12px", wordBreak:"break-all" }}>
-        {link}
-      </div>
-      <div style={{ display:"flex", gap:"8px" }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.88)", zIndex:100, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:"20px 20px 0 0", padding:"24px 22px 44px", width:"100%", maxWidth:"520px" }}>
+
+        {/* Handle */}
+        <div style={{ width:"36px", height:"4px", background:"#2a2a2a", borderRadius:"2px", margin:"0 auto 22px" }} />
+
+        <div style={{ fontSize:"10px", letterSpacing:"3px", color:C.dim, textTransform:"uppercase", marginBottom:"5px" }}>Save for Later</div>
+        <div style={{ fontSize:"20px", marginBottom:"5px" }}>Add to Home Screen</div>
+        <div style={{ fontSize:"13px", color:C.muted, lineHeight:"1.6", marginBottom:"22px" }}>
+          Open Life Capitals like any other app — no App Store needed. Your data loads instantly every time.
+        </div>
+
+        {/* iOS steps */}
+        {isIOS && (
+          <div style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"16px", marginBottom:"16px" }}>
+            <div style={{ fontSize:"10px", color:C.amber, letterSpacing:"2px", textTransform:"uppercase", marginBottom:"14px" }}>iPhone / iPad — Safari</div>
+            {iosSteps.map(({ n, t, d }) => (
+              <div key={n} style={{ display:"flex", gap:"12px", marginBottom:"12px", alignItems:"flex-start" }}>
+                <div style={{ minWidth:"22px", height:"22px", borderRadius:"50%", background:"rgba(201,180,110,0.15)", border:`1px solid rgba(201,180,110,0.3)`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <span style={{ fontSize:"11px", color:C.amber, fontWeight:"bold" }}>{n}</span>
+                </div>
+                <div>
+                  <div style={{ fontSize:"13px", color:C.text }}>{t}</div>
+                  <div style={{ fontSize:"12px", color:C.dim, marginTop:"2px" }}>{d}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Android steps */}
+        {isAndroid && (
+          <div style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"16px", marginBottom:"16px" }}>
+            <div style={{ fontSize:"10px", color:C.green, letterSpacing:"2px", textTransform:"uppercase", marginBottom:"14px" }}>Android — Chrome</div>
+            {androidSteps.map(({ n, t, d }) => (
+              <div key={n} style={{ display:"flex", gap:"12px", marginBottom:"12px", alignItems:"flex-start" }}>
+                <div style={{ minWidth:"22px", height:"22px", borderRadius:"50%", background:"rgba(109,191,126,0.12)", border:`1px solid rgba(109,191,126,0.3)`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <span style={{ fontSize:"11px", color:C.green, fontWeight:"bold" }}>{n}</span>
+                </div>
+                <div>
+                  <div style={{ fontSize:"13px", color:C.text }}>{t}</div>
+                  <div style={{ fontSize:"12px", color:C.dim, marginTop:"2px" }}>{d}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Desktop / generic */}
+        {!isIOS && !isAndroid && (
+          <div style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"16px", marginBottom:"16px" }}>
+            <div style={{ fontSize:"10px", color:C.dim, letterSpacing:"2px", textTransform:"uppercase", marginBottom:"8px" }}>Your Personal Link</div>
+            <div style={{ fontSize:"12px", color:C.muted, marginBottom:"10px" }}>Bookmark this URL to return from any device.</div>
+            <div style={{ background:"#0a0a0a", borderRadius:"6px", padding:"10px 12px", fontSize:"12px", color:"#555", fontFamily:"monospace", wordBreak:"break-all" }}>
+              {link}
+            </div>
+          </div>
+        )}
+
         <button onClick={copy} style={{
-          flex:1, padding:"10px", borderRadius:"8px", cursor:"pointer",
+          width:"100%", padding:"14px", borderRadius:"10px", cursor:"pointer", marginBottom:"10px",
           background: copied ? C.greenBg : C.surface2,
           color: copied ? C.green : C.muted,
           border:`1px solid ${copied ? C.greenBord : C.border}`,
-          fontSize:"12px", letterSpacing:"1px", touchAction:"manipulation",
+          fontSize:"13px", letterSpacing:"1px", touchAction:"manipulation", transition:"all 0.2s",
         }}>
-          {copied ? "✓ Copied" : "Copy Link"}
+          {copied ? "✓ Link Copied" : "Copy My Personal Link"}
         </button>
+
         <button onClick={onDismiss} style={{
-          flex:1, padding:"10px", borderRadius:"8px", cursor:"pointer",
+          width:"100%", padding:"14px", borderRadius:"10px", cursor:"pointer",
           background:"transparent", color:C.dim, border:`1px solid ${C.border}`,
-          fontSize:"12px", letterSpacing:"1px", touchAction:"manipulation",
+          fontSize:"13px", letterSpacing:"1px", touchAction:"manipulation",
         }}>
-          Got it
+          Done
         </button>
       </div>
     </div>
@@ -554,13 +617,11 @@ function TodayView({ history, setHistory, uid, userName }) {
 
   return (
     <div style={{ padding:"16px 16px 120px" }}>
-      {/* Greeting */}
       <div style={{ marginBottom:"20px" }}>
         <div style={{ fontSize:"13px", color:C.dim }}>{greeting()},</div>
         <div style={{ fontSize:"22px", color:C.text, marginTop:"2px" }}>{userName} ✦</div>
       </div>
 
-      {/* Day banner */}
       <div style={{
         display:"flex", alignItems:"center", justifyContent:"space-between",
         marginBottom:"24px", padding:"18px",
@@ -579,7 +640,6 @@ function TodayView({ history, setHistory, uid, userName }) {
         </div>
       </div>
 
-      {/* Sliders */}
       <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"20px", marginBottom:"16px" }}>
         <div style={{ fontSize:"10px", letterSpacing:"2.5px", color:C.dim, textTransform:"uppercase", marginBottom:"20px" }}>Rate Your Capitals</div>
         {CAPITALS.map(cap => (
@@ -588,7 +648,6 @@ function TodayView({ history, setHistory, uid, userName }) {
         ))}
       </div>
 
-      {/* Green questions */}
       {isGreen && (
         <div style={secBox("green")}>
           <div style={secLabel("green")}>🟢 Green Day Reflection</div>
@@ -605,7 +664,6 @@ function TodayView({ history, setHistory, uid, userName }) {
         </div>
       )}
 
-      {/* Gray questions */}
       {!isGreen && (
         <div style={{ ...secBox("red"), border:`1px solid ${(errors.stoppers||errors.smallestMove) ? "rgba(200,80,80,0.55)" : C.redBord}` }}>
           <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"3px", flexWrap:"wrap" }}>
@@ -624,7 +682,6 @@ function TodayView({ history, setHistory, uid, userName }) {
         </div>
       )}
 
-      {/* Energy & emotion */}
       <div style={secBox("neutral")}>
         <div style={secLabel("neutral")}>⚡ Energy & Emotion Check</div>
         <div style={{ height:"14px" }} />
@@ -639,7 +696,6 @@ function TodayView({ history, setHistory, uid, userName }) {
         </F>
       </div>
 
-      {/* Gentle close */}
       <div style={{ ...secBox("neutral"), marginBottom:"24px" }}>
         <div style={secLabel("neutral")}>🌙 One Gentle Close</div>
         <div style={{ fontSize:"12px", color:C.dim, margin:"6px 0 14px" }}>Complete one sentence:</div>
@@ -647,7 +703,6 @@ function TodayView({ history, setHistory, uid, userName }) {
         <TInput value={close.todayCounts} onChange={e=>setCl("todayCounts")(e.target.value)} placeholder="I showed up. I noticed. I kept going." />
       </div>
 
-      {/* Save */}
       <button onClick={handleSave} disabled={saving} style={{
         width:"100%", padding:"18px", borderRadius:"10px", cursor:"pointer",
         background: saved ? "transparent" : isGreen ? "rgba(74,140,87,0.16)" : C.text,
@@ -665,26 +720,25 @@ function TodayView({ history, setHistory, uid, userName }) {
 
 /* ─── root ──────────────────────────────────────────────────────────────────── */
 export default function App() {
-  const [view,        setView]        = useState("today");
-  const [history,     setHistory]     = useState({});
-  const [activeDay,   setActiveDay]   = useState(null);
-  const [user,        setUser]        = useState(null);   // { name, email, uid }
-  const [loading,     setLoading]     = useState(true);
-  const [onboarding,  setOnboarding]  = useState(false);
-  const [savingUser,  setSavingUser]  = useState(false);
-  const [showBanner,  setShowBanner]  = useState(false);
+  const [view,           setView]           = useState("today");
+  const [history,        setHistory]        = useState({});
+  const [activeDay,      setActiveDay]      = useState(null);
+  const [user,           setUser]           = useState(null);
+  const [loading,        setLoading]        = useState(true);
+  const [onboarding,     setOnboarding]     = useState(false);
+  const [savingUser,     setSavingUser]     = useState(false);
+  const [showHomeScreen, setShowHomeScreen] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const uid       = getUID();
-      const userData  = await db.getUser(uid);
+      const uid      = getUID();
+      const userData = await db.getUser(uid);
       if (userData) {
         setUser({ ...userData, uid });
         const reflections = await db.getReflections(uid);
         setHistory(reflections);
-        // Show link banner once per session if not dismissed
-        const dismissed = sessionStorage.getItem("lc_banner_dismissed");
-        if (!dismissed) setShowBanner(true);
+        const dismissed = sessionStorage.getItem("lc_hs_dismissed");
+        if (!dismissed) setShowHomeScreen(true);
       } else {
         setOnboarding(true);
       }
@@ -696,10 +750,10 @@ export default function App() {
     setSavingUser(true);
     const uid = getUID();
     await db.saveUser(uid, name, email);
-    await db.sendEmail(email, name, uid);
+    db.sendEmail(email, name, uid).catch(() => {}); // fire and forget
     setUser({ name, email, uid });
     setOnboarding(false);
-    setShowBanner(true);
+    setShowHomeScreen(true);
     setSavingUser(false);
   };
 
@@ -718,8 +772,8 @@ export default function App() {
   return (
     <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Georgia','Times New Roman',serif", color:C.text, maxWidth:"520px", margin:"0 auto", position:"relative" }}>
 
-      {/* Onboarding modal */}
       {onboarding && <OnboardingModal onSave={handleOnboard} loading={savingUser} />}
+      {showHomeScreen && <HomeScreenModal onDismiss={() => { setShowHomeScreen(false); sessionStorage.setItem("lc_hs_dismissed","1"); }} />}
 
       {/* Sticky header */}
       <div style={{ position:"sticky", top:0, zIndex:20, background:`${C.surface}f0`, borderBottom:`1px solid ${C.border}`, backdropFilter:"blur(10px)", padding:"14px 18px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -727,17 +781,21 @@ export default function App() {
           <div style={{ fontSize:"9px", letterSpacing:"3px", color:"#3a3a3a", textTransform:"uppercase" }}>Daily Reflection</div>
           <div style={{ fontSize:"20px", fontWeight:"normal", letterSpacing:"-0.3px", marginTop:"1px" }}>Life Capitals</div>
         </div>
-        {view === "history" && activeDay && (
-          <button onClick={() => setActiveDay(null)} style={{ background:"transparent", border:`1px solid ${C.border}`, borderRadius:"20px", color:C.dim, fontSize:"12px", padding:"6px 14px", cursor:"pointer", touchAction:"manipulation" }}>
-            ← Back
+        <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+          {view === "history" && activeDay && (
+            <button onClick={() => setActiveDay(null)} style={{ background:"transparent", border:`1px solid ${C.border}`, borderRadius:"20px", color:C.dim, fontSize:"12px", padding:"6px 14px", cursor:"pointer", touchAction:"manipulation" }}>
+              ← Back
+            </button>
+          )}
+          <button onClick={() => setShowHomeScreen(true)} title="Save to home screen" style={{
+            background:"transparent", border:`1px solid ${C.border}`, borderRadius:"20px",
+            color:C.dim, fontSize:"16px", padding:"5px 10px", cursor:"pointer",
+            touchAction:"manipulation", lineHeight:1,
+          }}>
+            📲
           </button>
-        )}
+        </div>
       </div>
-
-      {/* Link reminder banner */}
-      {showBanner && user && (
-        <LinkBanner uid={user.uid} onDismiss={() => { setShowBanner(false); sessionStorage.setItem("lc_banner_dismissed","1"); }} />
-      )}
 
       {/* Content */}
       <div>
