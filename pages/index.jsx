@@ -577,10 +577,73 @@ function HistoryList({ history, onSelect }) {
   );
 }
 
-/* ─── today view ────────────────────────────────────────────────────────────── */
-function TodayView({ history, setHistory, uid, userName }) {
+/* ─── date picker strip ─────────────────────────────────────────────────────── */
+function DatePickerStrip({ selectedDate, onChange, history }) {
   const today = getTodayKey();
-  const existing = history[today];
+
+  // Last 7 days newest first
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    return d.toISOString().split("T")[0];
+  });
+
+  const labelFor = (dateStr) => {
+    if (dateStr === today) return "Today";
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    if (dateStr === yesterday.toISOString().split("T")[0]) return "Yesterday";
+    return new Date(dateStr + "T12:00:00").toLocaleDateString("en-IN", { weekday:"short", day:"numeric" });
+  };
+
+  return (
+    <div style={{ padding:"0 16px 16px" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+        {/* Scrollable day chips */}
+        <div style={{ display:"flex", gap:"6px", overflowX:"auto", flex:1, paddingBottom:"2px", scrollbarWidth:"none" }}>
+          {days.map(d => {
+            const active  = d === selectedDate;
+            const hasData = !!history[d];
+            const isGreen = hasData && getDayType(history[d].avg, history[d].sliders) === "green";
+            return (
+              <button key={d} onClick={() => onChange(d)} style={{
+                flexShrink:0, padding:"7px 12px", borderRadius:"20px", cursor:"pointer",
+                background: active ? C.text : C.surface2,
+                color: active ? "#111" : hasData ? (isGreen ? C.green : C.gray) : C.dim,
+                border:`1px solid ${active ? C.text : hasData ? (isGreen ? C.greenBord : C.grayBord) : C.border}`,
+                fontSize:"12px", whiteSpace:"nowrap",
+                touchAction:"manipulation", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
+              }}>
+                {hasData && !active && <span style={{ marginRight:"4px", fontSize:"10px" }}>{isGreen ? "🟢" : "⬜"}</span>}
+                {labelFor(d)}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Calendar input for older dates */}
+        <div style={{ position:"relative", flexShrink:0 }}>
+          <input
+            type="date"
+            max={today}
+            value={selectedDate}
+            onChange={e => e.target.value && onChange(e.target.value)}
+            style={{
+              background:C.surface2, border:`1px solid ${C.border}`, borderRadius:"20px",
+              color: days.includes(selectedDate) ? C.dim : C.text,
+              padding:"7px 10px", fontSize:"12px", cursor:"pointer", outline:"none",
+              WebkitAppearance:"none", colorScheme:"dark",
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── today view ────────────────────────────────────────────────────────────── */
+function TodayView({ history, setHistory, uid, userName, selectedDate, onDateChange }) {
+  const today    = getTodayKey();
+  const existing = history[selectedDate];
+  const isPast   = selectedDate < today;
 
   const [sliders, setSliders] = useState(existing?.sliders || { ...EMPTY_SLIDERS });
   const [green,   setGreenS]  = useState(existing?.green   || { ...EMPTY_GREEN });
@@ -590,6 +653,18 @@ function TodayView({ history, setHistory, uid, userName }) {
   const [saved,   setSaved]   = useState(!!existing);
   const [errors,  setErrors]  = useState({});
   const [saving,  setSaving]  = useState(false);
+
+  // Reset form when date changes
+  useEffect(() => {
+    const e = history[selectedDate];
+    setSliders(e?.sliders || { ...EMPTY_SLIDERS });
+    setGreenS(e?.green    || { ...EMPTY_GREEN });
+    setGrayS(e?.gray      || { ...EMPTY_GRAY  });
+    setCheckS(e?.check    || { ...EMPTY_CHECK });
+    setCloseS(e?.close    || { ...EMPTY_CLOSE });
+    setSaved(!!e);
+    setErrors({});
+  }, [selectedDate]);
 
   const avg     = Object.values(sliders).reduce((a,b)=>a+b,0)/6;
   const isGreen = getDayType(avg, sliders) === "green";
@@ -609,17 +684,29 @@ function TodayView({ history, setHistory, uid, userName }) {
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setErrors({}); setSaving(true);
     const entry = { sliders, avg:parseFloat(avg.toFixed(2)), green:isGreen?green:null, gray:isGreen?null:gray, check, close, savedAt:new Date().toISOString() };
-    await db.saveReflection(uid, today, entry);
-    const next = { ...history, [today]: entry };
+    await db.saveReflection(uid, selectedDate, entry);
+    const next = { ...history, [selectedDate]: entry };
     setHistory(next);
     setSaved(true); setSaving(false);
   };
 
   return (
-    <div style={{ padding:"16px 16px 120px" }}>
+    <div style={{ padding:"0 0 120px" }}>
+
+      {/* Date picker strip */}
+      <DatePickerStrip selectedDate={selectedDate} onChange={onDateChange} history={history} />
+
+      <div style={{ padding:"0 16px" }}>
       <div style={{ marginBottom:"20px" }}>
-        <div style={{ fontSize:"13px", color:C.dim }}>{greeting()},</div>
-        <div style={{ fontSize:"22px", color:C.text, marginTop:"2px" }}>{userName} ✦</div>
+        <div style={{ fontSize:"13px", color:C.dim }}>{selectedDate === today ? greeting() : "Reflection for"},{" "}</div>
+        <div style={{ fontSize:"22px", color:C.text, marginTop:"2px" }}>
+          {selectedDate === today ? `${userName} ✦` : fmtFull(selectedDate)}
+        </div>
+        {isPast && (
+          <div style={{ fontSize:"11px", color:C.amber, marginTop:"4px" }}>
+            ✎ Filling in a past day
+          </div>
+        )}
       </div>
 
       <div style={{
@@ -630,7 +717,7 @@ function TodayView({ history, setHistory, uid, userName }) {
         borderRadius:"12px", transition:"all 0.5s",
       }}>
         <div>
-          <div style={{ fontSize:"10px", color:C.dim, letterSpacing:"1.5px", textTransform:"uppercase", marginBottom:"5px" }}>{fmtFull(today)}</div>
+          <div style={{ fontSize:"10px", color:C.dim, letterSpacing:"1.5px", textTransform:"uppercase", marginBottom:"5px" }}>{fmtFull(selectedDate)}</div>
           <div style={{ fontSize:"20px", color: isGreen ? C.green : C.gray, transition:"color 0.4s" }}>{isGreen ? "🟢 Green Day" : "⬜ Gray Day"}</div>
           <div style={{ fontSize:"11px", color:"#444", marginTop:"3px" }}>{isGreen ? "avg > 5 or one capital ≥ 8" : "avg ≤ 5 and no capital ≥ 8"}</div>
         </div>
@@ -712,8 +799,9 @@ function TodayView({ history, setHistory, uid, userName }) {
         transition:"all 0.3s", opacity: saving ? 0.6 : 1,
         WebkitTapHighlightColor:"transparent", touchAction:"manipulation",
       }}>
-        {saving ? "Saving…" : saved ? "✓ Reflection Saved" : "Save Today's Reflection"}
+        {saving ? "Saving…" : saved ? "✓ Reflection Saved" : isPast ? "Save Past Reflection" : "Save Today's Reflection"}
       </button>
+      </div>{/* end inner padding */}
     </div>
   );
 }
@@ -728,6 +816,7 @@ export default function App() {
   const [onboarding,     setOnboarding]     = useState(false);
   const [savingUser,     setSavingUser]     = useState(false);
   const [showHomeScreen, setShowHomeScreen] = useState(false);
+  const [selectedDate,   setSelectedDate]   = useState(getTodayKey());
 
   useEffect(() => {
     (async () => {
@@ -800,7 +889,7 @@ export default function App() {
       {/* Content */}
       <div>
         {view === "today" && user && (
-          <TodayView history={history} setHistory={setHistory} uid={user.uid} userName={user.name} />
+          <TodayView history={history} setHistory={setHistory} uid={user.uid} userName={user.name} selectedDate={selectedDate} onDateChange={setSelectedDate} />
         )}
         {view === "history" && !activeDay && <HistoryList history={history} onSelect={setActiveDay} />}
         {view === "history" && activeDay && history[activeDay] && (
