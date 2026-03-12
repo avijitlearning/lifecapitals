@@ -14,7 +14,7 @@ const RESEND_API   = "re_exiPZRzd_D4RYW1azpQvPDBDQu9ZSD2Ye"; // https://resend.c
    In preview mode (no Supabase keys), all data falls back to localStorage.
    Swap isMock = false once real keys are in place.
    ───────────────────────────────────────────────────────────────────────────── */
-const isMock = SUPABASE_URL === "YOUR_SUPABASE_URL";
+const isMock = SUPABASE_URL === "https://asyvvarzybrtelvgibah.supabase.co";
 
 const db = {
   async getUser(uid) {
