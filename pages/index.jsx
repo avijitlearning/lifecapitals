@@ -5,9 +5,9 @@ import { useState, useEffect } from "react";
    When deploying to Vercel, replace these with your real values from
    https://supabase.com → Project Settings → API
    ───────────────────────────────────────────────────────────────────────────── */
-const SUPABASE_URL = "YOUR_SUPABASE_URL";
-const SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY";
-const RESEND_API   = "YOUR_RESEND_API_KEY"; // https://resend.com
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY;
+const RESEND_API   = process.env.NEXT_PUBLIC_RESEND_API; // https://resend.com
 
 /* ─────────────────────────────────────────────────────────────────────────────
    DATA LAYER
