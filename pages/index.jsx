@@ -72,15 +72,10 @@ const db = {
 
   async sendEmail(email, name, uid) {
     if (isMock) { console.log(`[mock] email sent to ${email} with uid ${uid}`); return; }
-    await fetch("https://api.resend.com/emails", {
+    await fetch("/api/send-email", {
       method: "POST",
-      headers: { Authorization: `Bearer ${RESEND_API}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: "Life Capitals <noreply@yourapp.com>",
-        to:   email,
-        subject: "Your Life Capitals personal link",
-        html: `<p>Hi ${name},</p><p>Here's your personal Life Capitals link. Bookmark it to access your reflections from any device:</p><p><a href="https://yourapp.vercel.app/u/${uid}">https://yourapp.vercel.app/u/${uid}</a></p><p>This link is private — don't share it with others.</p>`,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, name, uid }),
     });
   },
 };
