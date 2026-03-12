@@ -1,0 +1,21 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "outputDirectory": ".next"
+}
+```
+
+Commit it. Vercel will auto-redeploy.
+
+---
+
+**Also double-check these two things while you're on GitHub:**
+
+**1. Make sure your file structure looks exactly like this:**
+```
+life-capitals/
+├── pages/
+│   ├── _app.jsx
+│   └── index.jsx
+├── package.json
+└── vercel.json
