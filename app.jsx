@@ -5,9 +5,9 @@ import { useState, useEffect } from "react";
    When deploying to Vercel, replace these with your real values from
    https://supabase.com → Project Settings → API
    ───────────────────────────────────────────────────────────────────────────── */
-const SUPABASE_URL = "YOUR_SUPABASE_URL";
-const SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY";
-const RESEND_API   = "YOUR_RESEND_API_KEY"; // https://resend.com
+const SUPABASE_URL = "https://asyvvarzybrtelvgibah.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzeXZ2YXJ6eWJydGVsdmdpYmFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMTg2MzAsImV4cCI6MjA4ODg5NDYzMH0.2a87G0hQbi6Kji-0lU65ee011o4K-8-NT1efqcSrRzM";
+const RESEND_API   = "re_exiPZRzd_D4RYW1azpQvPDBDQu9ZSD2Ye"; // https://resend.com
 
 /* ─────────────────────────────────────────────────────────────────────────────
    DATA LAYER
@@ -79,7 +79,7 @@ const db = {
         from: "Life Capitals <noreply@yourapp.com>",
         to:   email,
         subject: "Your Life Capitals personal link",
-        html: `<p>Hi ${name},</p><p>Here's your personal Life Capitals link. Bookmark it to access your reflections from any device:</p><p><a href="https://yourapp.vercel.app/u/${uid}">https://yourapp.vercel.app/u/${uid}</a></p><p>This link is private — don't share it with others.</p>`,
+        html: `<p>Hi ${name},</p><p>Here's your personal Life Capitals link. Bookmark it to access your reflections from any device:</p><p><a href="https://lifecapitals.vercel.app/u/${uid}">https://lifecapitals.vercel.app/u/${uid}</a></p><p>This link is private — don't share it with others.</p>`,
       }),
     });
   },
@@ -286,7 +286,7 @@ function OnboardingModal({ onSave, loading }) {
 /* ─── link reminder banner ──────────────────────────────────────────────────── */
 function LinkBanner({ uid, onDismiss }) {
   const [copied, setCopied] = useState(false);
-  const link = `yourapp.vercel.app/u/${uid}`;
+  const link = `lifecapitals.vercel.app/u/${uid}`;
   const copy = () => {
     navigator.clipboard?.writeText(link).catch(()=>{});
     setCopied(true);
